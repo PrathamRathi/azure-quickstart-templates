@@ -1,0 +1,209 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+  "contentVersion": "1.0.0.0",
+  "parameters": {
+    "name": {
+      "type": "string",
+      "metadata": {
+        "description": "Name of the Logic App"
+      }
+    },
+    "location": {
+      "type": "string",
+      "defaultValue": "[resourceGroup().location]",
+      "metadata": {
+        "description": "Deployment location"
+      }
+    },
+    "catalogId": {
+      "type": "string",
+      "metadata": {
+        "description": "Catalog Id from Entitlement Management"
+      }
+    },
+    "customDataProvidedResourceId": {
+      "type": "string",
+      "metadata": {
+        "description": "Custom Data Provided Resource Id from Entitlement Management"
+      }
+    },
+    "armResource": {
+      "type": "string",
+      "defaultValue": "management.azure.com",
+      "metadata": {
+        "description": "ARM resource based on the cloud"
+      }
+    },
+    "issuer": {
+      "type": "string",
+      "defaultValue": "https://sts.windows.net/",
+      "metadata": {
+        "description": "Token issuer"
+      }
+    },
+    "appId": {
+      "type": "string",
+      "defaultValue": "2829028a-b35b-42cc-86e3-517e751a3e2a",
+      "metadata": {
+        "description": "ESI AppId for Logic App Creation"
+      }
+    },
+    "arAppId": {
+      "type": "string",
+      "defaultValue": "d8c767ef-3e9a-48c4-aef9-562696539b39",
+      "metadata": {
+        "description": "AR AppId for Logic App Creation"
+      }
+    }
+  },
+  "variables": {
+    "catalogIdExpression": "@{triggerBody()?['catalogId']}",
+    "customDataProvidedResourceIdExpression": "@{triggerBody()?['customDataProvidedResourceId']}",
+    "possession": "[concat(resourceGroup().id, '/providers/Microsoft.Logic/workflows/', parameters('name'))]"
+  },
+  "resources": [
+    {
+      "type": "Microsoft.Logic/workflows",
+      "apiVersion": "2019-05-01",
+      "name": "[parameters('name')]",
+      "location": "[parameters('location')]",
+      "tags": {
+        "Purpose": "Azure AD Entitlement Management"
+      },
+      "properties": {
+        "state": "Enabled",
+        "definition": {
+          "$schema": "https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#",
+          "contentVersion": "1.0.0.0",
+          "parameters": {},
+          "triggers": {
+            "manual": {
+              "type": "Request",
+              "kind": "Http",
+              "inputs": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "reviewDefinitionId": {
+                      "type": "string"
+                    },
+                    "reviewInstanceId": {
+                      "type": "string"
+                    },
+                    "catalogId": {
+                      "type": "string"
+                    },
+                    "customDataProvidedResourceId": {
+                      "type": "string"
+                    },
+                    "callbackDataType": {
+                      "type": "string"
+                    },
+                    "triggerType": {
+                      "type": "string"
+                    }
+                  }
+                }
+              },
+              "operationOptions": "IncludeAuthorizationHeadersInOutputs"
+            }
+          },
+          "actions": {
+            "Condition": {
+              "actions": {},
+              "expression": {
+                "and": [
+                  {
+                    "equals": [
+                      "[variables('catalogIdExpression')]",
+                      "[trim(parameters('catalogId'))]"
+                    ]
+                  },
+                  {
+                    "equals": [
+                      "[variables('customDataProvidedResourceIdExpression')]",
+                      "[trim(parameters('customDataProvidedResourceId'))]"
+                    ]
+                  }
+                ]
+              },
+              "runAfter": {},
+              "type": "If"
+            }
+          },
+          "outputs": {}
+        },
+        "parameters": {},
+        "accessControl": {
+          "triggers": {
+            "SasAuthenticationPolicy": {
+              "State": "Disabled"
+            },
+            "openAuthenticationPolicies": {
+              "policies": {
+                "EntraIDESIPOPAuthPolicy": {
+                  "type": "AADPOP",
+                  "claims": [
+                    {
+                      "name": "iss",
+                      "value": "[concat(trim(parameters('issuer')), subscription().tenantId, '/')]"
+                    },
+                    {
+                      "name": "aud",
+                      "value": "[concat('https://', trim(parameters('armResource')))]"
+                    },
+                    {
+                      "name": "appid",
+                      "value": "[trim(parameters('appId'))]"
+                    },
+                    {
+                      "name": "m",
+                      "value": "POST"
+                    },
+                    {
+                      "name": "u",
+                      "value": "[trim(parameters('armResource'))]"
+                    },
+                    {
+                      "name": "p",
+                      "value": "[variables('possession')]"
+                    }
+                  ]
+                },
+                "EntraIDAccessReviewsPOPAuthPolicy": {
+                  "type": "AADPOP",
+                  "claims": [
+                    {
+                      "name": "iss",
+                      "value": "[concat(trim(parameters('issuer')), subscription().tenantId, '/')]"
+                    },
+                    {
+                      "name": "aud",
+                      "value": "[concat('https://', trim(parameters('armResource')))]"
+                    },
+                    {
+                      "name": "appid",
+                      "value": "[trim(parameters('arAppId'))]"
+                    },
+                    {
+                      "name": "m",
+                      "value": "POST"
+                    },
+                    {
+                      "name": "u",
+                      "value": "[trim(parameters('armResource'))]"
+                    },
+                    {
+                      "name": "p",
+                      "value": "[variables('possession')]"
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  ]
+}
